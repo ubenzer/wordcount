@@ -1,9 +1,25 @@
 <html>
 <head>
   <title>Speak To Me</title>
+  <link media="all" rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <button id="startButton">Start</button>
-  <button id="stopButton">Stop</button>
+  <div id="wordCloudContainer"></div>
+  <div id="foreground">
+    <div id="startGroup">
+      <button class="big-button button" id="startButton">Start</button>
+    </div>
+    <div id="progressGroup">
+
+      <div class="right">
+        <button class="big-button button" id="stopButton"></button>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.5/d3.min.js"></script>
+  <script src="https://rawgithub.com/jasondavies/d3-cloud/master/d3.layout.cloud.js"></script>
+  <script src="/recognition.js"></script>
   <script src="/app.js"></script>
+
+
 </body>

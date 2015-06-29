@@ -3,78 +3,131 @@
   var startButton = document.getElementById("startButton");
   var stopButton = document.getElementById("stopButton");
   var recognizer = null;
+  var wordCloud = new WordCloud(document.getElementById("wordCloudContainer"));
+
+  var updateTick = null;
+  var latestRecognition = null;
+  var lastDrawnRecognition = null;
 
   startButton.onclick = function(e) {
-    recognizer = new Recognizer();
+    recognizer = new Recognizer({
+      language: "tr-TR",
+      onUpdate: onUpdateFn
+    });
     recognizer.startRecognition();
+    updateTick = setInterval(function() {
+      if (latestRecognition !== null &&
+          (lastDrawnRecognition === null ||
+           lastDrawnRecognition.finalTranscript + lastDrawnRecognition.interimTranscript !==
+           latestRecognition.finalTranscript + latestRecognition.interimTranscript)
+          ) {
+            wordCloud.draw(latestRecognition.wordLookup);
+            lastDrawnRecognition = latestRecognition;
+      }
+    }, 500);
   }
 
   stopButton.onclick = function(e) {
+    if (updateTick) {
+      clearTimeout(updateTick);
+    }
     recognizer.stopRecognition();
     recognizer = null;
   }
 
-})();
-var Recognizer = function() {
-  let finalTranscript = "";
-  let wordCount = 0;
-  let wordLookup = {};
-  let recognition = setUpRecognition();
-
-  this.startRecognition = startRecognitionImpl;
-  this.stopRecognition = stopRecognitionImpl;
-
-  function stopRecognitionImpl() {
-    recognition.stop();
+  function onUpdateFn(currentResult) {
+    latestRecognition = currentResult;
+    stopButton.innerText = currentResult.wordCount;
   }
 
-  function startRecognitionImpl() {
-    recognition.lang = "tr-TR"; // TODO needs to be parametric
-    recognition.onstart = function(event) {
-      console.log("onstart", event);
+  function WordCloud(container) {
+    var fill = d3.scale.category20();
+    var drawRoot = d3.select(container)
+      .append("svg")
+        .attr("width", container.clientWidth)
+        .attr("height", container.clientHeight)
+      .append("g")
+        .attr("transform", "translate(" + container.clientWidth / 2 + "," + container.clientHeight / 2 + ")");
+
+    this.draw = draw;
+
+    function draw(wordsObj) {
+      let words = [];
+      Object.keys(wordsObj).map(function(k) {
+        let v = wordsObj[k];
+        words.push({
+          text: k,
+          count: v
+        });
+      });
+
+      normalizeFontSizes(words);
+
+      var layout = d3.layout.cloud()
+        .size([container.clientWidth, container.clientHeight])
+        .words(words)
+        .padding(10)
+        .rotate(function() { return 0; })
+        //.rotate(function() { return getRandomInt(-60, 60); })
+        .font("Impact")
+        .fontSize(function(d) { return d.fontSize; })
+        .on("end", internalDraw.bind(this, words));
+      layout.start();
     }
-    recognition.onresult = function(event) {
-      console.log("onresult", event);
-      let interimTranscript = "";
-      for (var i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          addFinalTranscript(event.results[i][0].transcript);
-        } else {
-          interimTranscript += event.results[i][0].transcript;
+
+    function internalDraw(words) {
+      let drawData = drawRoot
+        .selectAll("text")
+          .data(words)
+
+       drawData
+          .enter()
+          .append("text")
+          .text(function(d) { return d.text; })
+          .style("font-family", "Impact")
+          .style("fill", function(d, i) { return fill(i); })
+          .style("opacity", 0)
+          .attr("text-anchor", "middle");
+
+       drawData
+       .transition()
+       .duration(500)
+        .style("opacity", 1)
+        .style("font-size", function(d) { return d.fontSize + "px"; })
+        .attr("transform", function(d) {
+          return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+        });
+
+        drawData.exit()
+          .transition()
+          .duration(250)
+          .style("opacity", 0)
+          .remove();
+
+    }
+
+    function normalizeFontSizes(arrayOfWords) {
+      let min = 0;
+      let max = 0;
+      arrayOfWords.forEach(function(word) {
+        if (min === 0 || word.count < min) {
+          min = word.count;
         }
-      }
-      console.info(interimTranscript);
-      console.log(finalTranscript);
-      console.warn(wordCount + interimTranscript.split(" ").length);
-    }
-    recognition.onerror = function(event) {
-      console.log("onerror", event);
-    }
-    recognition.onend = function(event) {
-      console.log("onend", event);
-      console.log(finalTranscript)
-      console.log(wordCount);
-      console.log(wordLookup);
-    }
-    recognition.start();
-  }
+        if (max < word.count) {
+          max = word.count;
+        }
+      });
 
-  function addFinalTranscript(word) {
-    finalTranscript += word;
-    let words = word.split(" ");
-    let newCount = words.length;
-    wordCount += newCount;
+      let linearScale = d3.scale.linear().domain([min, max]).range([15, Math.min(container.clientWidth, container.clientHeight) / 4]);
 
-    words.forEach(function(el, i) {
-      wordLookup[el] = wordLookup[el] || 0;
-      wordLookup[el]++;
-    });
-  }
+      arrayOfWords.forEach(function(k) {
+        k.fontSize = linearScale(k.count);
+        console.debug(k);
+      });
+    }
 
-  function setUpRecognition() {
-    var recognition = new webkitSpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    return recognition;
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1) + min);
+    }
   }
-};
+})();
